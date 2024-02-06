@@ -11,20 +11,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check if label is "Ready to Merge"
+      - name: Check if all checks passed
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            PR_LABELS=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ github.event.number }}/labels")
-            if echo "$PR_LABELS" | jq -e '.[].name' | grep -q 'Ready to Merge'; then
-              echo "PR is ready to merge. Notifying the owner."
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            PR_NUMBER=$(jq --raw-output .pull_request.number "${{ github.event_path }}")
+            CHECKS_STATUS=$(gh pr checks $PR_NUMBER --json status --jq '.[] | select(.app.name == "GitHub Actions") | .status')
+            
+            if [ "$CHECKS_STATUS" == "\"completed\"" ]; then
+              echo "All checks passed. Ready to merge!"
             else
-              echo "PR is not labeled as 'Ready to Merge'. No action needed."
-              exit 78 # Exit code 78 means a neutral action, i.e., no further action needed
+              echo "Checks have not passed yet."
+              exit 1
             fi
-          else
-            echo "Event is not a pull request. No action needed."
-            exit 78
           fi
 
       - name: Notify PR Owner
