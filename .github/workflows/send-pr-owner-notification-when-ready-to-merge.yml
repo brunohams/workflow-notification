@@ -16,16 +16,19 @@ jobs:
 
       - name: Check Mergeability
         run: |
-          merge_status=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.number }}" \
-            | jq -r '.mergeable')
+          pr_number="${{ github.event.number }}"
+          repo="${{ github.repository }}"
+          
+          # Check if the pull request is mergeable
+          mergeable=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/$repo/pulls/$pr_number" | jq -r '.mergeable')
 
-          if [ "$merge_status" = "true" ]; then
-            echo "Pull request is mergeable."
-          else
-            echo "Pull request is not mergeable."
-            exit 1
-          fi
+          # Check if all required checks have passed
+          checks_status=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/$repo/pulls/$pr_number/checks" | jq -r '.check_runs[] | select(.conclusion != "success") | .conclusion')
+
+          if [ "$mergeable" = "true" ] && [ -z "$checks_status" ]; then
+            echo "Pull request is mergeable,
 
       - name: Send Email
         uses: dawidd6/action-send-mail@v1
