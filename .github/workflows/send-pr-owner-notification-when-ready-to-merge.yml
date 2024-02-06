@@ -1,44 +1,12 @@
 name: Notify PR Owner
 
 on:
-  pull_request:
-    types:
-      - opened
-      - synchronize
-
+  pull_request_review:
+    types: ['submitted']
 jobs:
-  notify:
+  assign-senior-if-mergeable:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Check if all checks passed
-        run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            PR_NUMBER=$(jq --raw-output .pull_request.number "${{ github.event_path }}")
-            CHECKS_STATUS=$(gh pr checks $PR_NUMBER --json status --jq '.[] | select(.app.name == "GitHub Actions") | .status')
-            
-            if [ "$CHECKS_STATUS" == "\"completed\"" ]; then
-              echo "All checks passed. Ready to merge!"
-            else
-              echo "Checks have not passed yet."
-              exit 1
-            fi
-          fi
-
-      - name: Notify PR Owner
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const owner = context.payload.pull_request.user.login;
-            const prNumber = context.payload.pull_request.number;
-            const commentBody = 'Your PR is ready to merge.';
-
-            const octokit = github.getOctokit(process.env.GITHUB_TOKEN);
-            await octokit.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-              body: commentBody,
-            });
-
+      - name: Assign senior
+        if: github.event.pull_request.mergeable
+        run: <some code that assigns the senior>
