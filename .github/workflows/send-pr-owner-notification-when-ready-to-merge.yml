@@ -3,6 +3,11 @@ name: Notify PR Owner
 on:
   pull_request_review:
     types: ['submitted']
+  pull_request:
+     types:
+       - opened
+       - synchronize
+
 jobs:
   assign-senior-if-mergeable:
     runs-on: ubuntu-latest
