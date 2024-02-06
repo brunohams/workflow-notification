@@ -1,4 +1,4 @@
-name: Notify PR Owner
+name: Check Mergeability and Notify
 
 on:
   pull_request:
@@ -7,38 +7,40 @@ on:
       - synchronize
 
 jobs:
-  notify:
+  check_mergeability:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check if all checks passed
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Check Mergeability
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            PR_NUMBER=$(jq --raw-output .pull_request.number "${{ github.event_path }}")
-            CHECKS_STATUS=$(gh pr checks $PR_NUMBER --json status --jq '.[] | select(.app.name == "GitHub Actions") | .status')
-            
-            if [ "$CHECKS_STATUS" == "\"completed\"" ]; then
-              echo "All checks passed. Ready to merge!"
-            else
-              echo "Checks have not passed yet."
-              exit 1
-            fi
-          fi
+          pr_number="${{ github.event.number }}"
+          repo="${{ github.repository }}"
+          
+          # Check if the pull request is mergeable
+          mergeable=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/$repo/pulls/$pr_number" | jq -r '.mergeable')
 
-      - name: Notify PR Owner
-        uses: actions/github-script@v7
+          # Check if all required checks have passed
+          checks_status=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/$repo/pulls/$pr_number/checks" | jq -r '.check_runs[] | select(.conclusion != "success") | .conclusion')
+
+          if [ "$mergeable" = "true" ] && [ -z "$checks_status" ]; then
+            echo "Pull request is mergeable,
+
+      - name: Send Email
+        uses: dawidd6/action-send-mail@v1
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const owner = context.payload.pull_request.user.login;
-            const prNumber = context.payload.pull_request.number;
-            const commentBody = 'Your PR is ready to merge.';
-
-            const octokit = github.getOctokit(process.env.GITHUB_TOKEN);
-            await octokit.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-              body: commentBody,
-            });
-
+          server_address: smtp.example.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Pull Request Mergeability Status"
+          to: ${{ github.event.pull_request.user.login }}
+          body: |
+            Pull request #${{ github.event.number }} is mergeable: ${merge_status}.
+            Repository: ${{ github.repository }}
+            Title: ${{ github.event.pull_request.title }}
+            URL: ${{ github.event.pull_request.html_url }}
