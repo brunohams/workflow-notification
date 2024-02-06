@@ -1,17 +1,43 @@
-name: Notify PR Owner
+name: Check Mergeability and Notify
 
 on:
-  pull_request_review:
-    types: ['submitted']
   pull_request:
-     types:
-       - opened
-       - synchronize
+    types:
+      - opened
+      - synchronize
 
 jobs:
-  assign-senior-if-mergeable:
+  check_mergeability:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Assign senior
-        if: github.event.pull_request.mergeable
-        run: <some code that assigns the senior>
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Check Mergeability
+        run: |
+          merge_status=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.number }}" \
+            | jq -r '.mergeable')
+
+          if [ "$merge_status" = "true" ]; then
+            echo "Pull request is mergeable."
+          else
+            echo "Pull request is not mergeable."
+            exit 1
+          fi
+
+      - name: Send Email
+        uses: dawidd6/action-send-mail@v1
+        with:
+          server_address: smtp.example.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Pull Request Mergeability Status"
+          to: ${{ github.event.pull_request.user.login }}
+          body: |
+            Pull request #${{ github.event.number }} is mergeable: ${merge_status}.
+            Repository: ${{ github.repository }}
+            Title: ${{ github.event.pull_request.title }}
+            URL: ${{ github.event.pull_request.html_url }}
